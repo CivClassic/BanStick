@@ -1,16 +1,7 @@
 package com.programmerdan.minecraft.banstick.handler;
 
 import com.programmerdan.minecraft.banstick.BanStick;
-import com.programmerdan.minecraft.banstick.data.BSBan;
-import com.programmerdan.minecraft.banstick.data.BSIP;
-import com.programmerdan.minecraft.banstick.data.BSIPData;
-import com.programmerdan.minecraft.banstick.data.BSLog;
-import com.programmerdan.minecraft.banstick.data.BSPlayer;
-import com.programmerdan.minecraft.banstick.data.BSSession;
-import com.programmerdan.minecraft.banstick.data.BSShare;
-import java.net.InetAddress;
-import java.util.List;
-import java.util.UUID;
+import com.programmerdan.minecraft.banstick.data.*;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -18,11 +9,17 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import vg.civcraft.mc.civmodcore.dao.ManagedDatasource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+
 /**
  * Ties into the managed datasource processes of the CivMod core plugin.
  *
  * @author <a href="mailto:programmerdan@gmail.com">ProgrammerDan</a>
- *
  */
 public class BanStickDatabaseHandler {
 
@@ -77,7 +74,7 @@ public class BanStickDatabaseHandler {
 		try {
 			BanStick.getPlugin().info("Update prepared, starting database update.");
 			if (!data.updateDatabase()) {
-				BanStick.getPlugin().info( "Update failed, disabling plugin.");
+				BanStick.getPlugin().info("Update failed, disabling plugin.");
 				return false;
 			}
 		} catch (Exception e) {
@@ -93,8 +90,8 @@ public class BanStickDatabaseHandler {
 	}
 
 	private void activateDirtySave(ConfigurationSection config) {
-		long period = 5*60*50l;
-		long delay = 5*60*50l;
+		long period = 5 * 60 * 50l;
+		long delay = 5 * 60 * 50l;
 		if (config != null) {
 			period = config.getLong("period", period);
 			delay = config.getLong("delay", delay);
@@ -146,8 +143,8 @@ public class BanStickDatabaseHandler {
 
 	private void activatePreload(ConfigurationSection config) {
 		if (config != null && config.getBoolean("enabled")) {
-			long period = 5*60*50l;
-			long delay = 5*60*50l;
+			long period = 5 * 60 * 50l;
+			long delay = 5 * 60 * 50l;
 			period = config.getLong("period", period);
 			delay = config.getLong("delay", delay);
 			final int batchsize = config.getInt("batch", 100);
@@ -156,6 +153,7 @@ public class BanStickDatabaseHandler {
 
 			new BukkitRunnable() {
 				private long lastId = 0l;
+
 				@Override
 				public void run() {
 					BanStick.getPlugin().debug("IP preload {0}, lim {1}", lastId, batchsize);
@@ -166,6 +164,7 @@ public class BanStickDatabaseHandler {
 
 			new BukkitRunnable() {
 				private long lastId = 0l;
+
 				@Override
 				public void run() {
 					BanStick.getPlugin().debug("Proxy preload {0}, lim {1}", lastId, batchsize);
@@ -176,6 +175,7 @@ public class BanStickDatabaseHandler {
 
 			new BukkitRunnable() {
 				private long lastId = 0l;
+
 				@Override
 				public void run() {
 					BanStick.getPlugin().debug("Ban preload {0}, lim {1}", lastId, batchsize);
@@ -186,6 +186,7 @@ public class BanStickDatabaseHandler {
 
 			new BukkitRunnable() {
 				private long lastId = 0l;
+
 				@Override
 				public void run() {
 					BanStick.getPlugin().debug("Player preload {0}, lim {1}", lastId, batchsize);
@@ -196,6 +197,7 @@ public class BanStickDatabaseHandler {
 
 			new BukkitRunnable() {
 				private long lastId = 0l;
+
 				@Override
 				public void run() {
 					BanStick.getPlugin().debug("Session preload {0}, lim {1}", lastId, batchsize);
@@ -206,6 +208,7 @@ public class BanStickDatabaseHandler {
 
 			new BukkitRunnable() {
 				private long lastId = 0l;
+
 				@Override
 				public void run() {
 					BanStick.getPlugin().debug("Share preload {0}, lim {1}", lastId, batchsize);
@@ -222,113 +225,45 @@ public class BanStickDatabaseHandler {
 	/**
 	 * Basic method to set up data model v1.
 	 */
-	private void initializeTables() {
-		data.registerMigration(0,  false,
-					"CREATE TABLE IF NOT EXISTS bs_player (" +
-					" pid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" name VARCHAR(16)," +
-					" uuid CHAR(36) NOT NULL UNIQUE," +
-					" first_add TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" bid BIGINT REFERENCES bs_ban(bid)," +
-					" ip_pardon_time TIMESTAMP NULL, " +
-					" proxy_pardon_time TIMESTAMP NULL," +
-					" shared_pardon_time TIMESTAMP NULL," +
-					" INDEX bs_player_name (name)," +
-					" INDEX bs_player_ip_pardons (ip_pardon_time)," +
-					" INDEX bs_player_proxy_pardons (proxy_pardon_time)," +
-					" INDEX bs_player_shared_pardons (shared_pardon_time)," +
-					" INDEX bs_player_join (first_add)" +
-					");",
-					"CREATE TABLE IF NOT EXISTS bs_session (" +
-					" sid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" pid BIGINT REFERENCES bs_player(pid)," +
-					" join_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" leave_time TIMESTAMP NULL," +
-					" iid BIGINT NOT NULL REFERENCES bs_ip(iid)," +
-					" INDEX bs_session_pids (pid, join_time, leave_time)" +
-					");",
-					"CREATE TABLE IF NOT EXISTS bs_ban_log (" +
-					" lid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" pid BIGINT NOT NULL REFERENCES bs_player(pid)," +
-					" bid BIGINT NOT NULL REFERENCES bs_ban(bid)," +
-					" action_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" action VARCHAR(10) NOT NULL," +
-					" INDEX bs_ban_log_time (pid, action_time DESC)" +
-					");", // TODO: Whenever a ban is given or removed from a player, record.
-					"CREATE TABLE IF NOT EXISTS bs_ban (" +
-					" bid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" ban_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" ip_ban BIGINT REFERENCES bs_ip(iid)," +
-					" proxy_ban BIGINT REFERENCES bs_ip_data(idid)," +
-					" share_ban BIGINT REFERENCES bs_share(sid)," +
-					" admin_ban BOOLEAN DEFAULT FALSE," +
-					" message TEXT," +
-					" ban_end TIMESTAMP NULL," +
-					" INDEX bs_ban_time (ban_time)," +
-					" INDEX bs_ban_ip (ip_ban)," +
-					" INDEX bs_ban_proxy (proxy_ban)," +
-					" INDEX bs_ban_share (share_ban)," +
-					" INDEX bs_ban_end (ban_end)" +
-					");",
-					"CREATE TABLE IF NOT EXISTS bs_share (" +
-					" sid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" first_pid BIGINT NOT NULL REFERENCES bs_player(pid)," +
-					" second_pid BIGINT NOT NULL REFERENCES bs_player(pid)," +
-					" first_sid BIGINT NOT NULL REFERENCES bs_session(sid)," +
-					" second_sid BIGINT NOT NULL REFERENCES bs_session(sid)," +
-					" pardon BOOLEAN DEFAULT FALSE," +
-					" pardon_time TIMESTAMP NULL," +
-					" INDEX bs_share (first_pid, second_pid)," +
-					" INDEX bs_pardon (pardon_time)" +
-					");",
-					"CREATE TABLE IF NOT EXISTS bs_ip (" +
-					" iid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" ip4 CHAR(15)," +
-					" ip4cidr SMALLINT," +
-					" ip6 CHAR(39)," +
-					" ip6cidr SMALLINT," +
-					" INDEX bs_session_ip4 (ip4, ip4cidr)," +
-					" INDEX bs_session_ip6 (ip6, ip6cidr)" +
-					");",
-					"CREATE TABLE IF NOT EXISTS bs_ip_data (" +
-					" idid BIGINT AUTO_INCREMENT PRIMARY KEY," +
-					" iid BIGINT NOT NULL REFERENCES bs_ip(iid)," +
-					" create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-					" valid BOOLEAN DEFAULT TRUE," +
-					" continent TEXT," +
-					" country TEXT," +
-					" region TEXT," +
-					" city TEXT," +
-					" postal TEXT," +
-					" lat DOUBLE DEFAULT NULL," +
-					" lon DOUBLE DEFAULT NULL," +
-					" domain TEXT," +
-					" provider TEXT," +
-					" registered_as TEXT," +
-					" connection TEXT," +
-					" proxy FLOAT," +
-					" source TEXT," +
-					" comment TEXT," +
-					" INDEX bs_ip_data_iid (iid)," +
-					" INDEX bs_ip_data_valid (valid, create_time DESC)," +
-					" INDEX bs_ip_data_proxy (proxy)" +
-					");"
-				);
-		data.registerMigration(1,  false, "CREATE TABLE IF NOT EXISTS bs_exclusion ("
-		        + "eid BIGINT AUTO_INCREMENT PRIMARY KEY,"
-	            + "create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
-                + "first_pid BIGINT NOT NULL REFERENCES bs_player(pid),"
-                + "second_pid BIGINT NOT NULL REFERENCES bs_player(pid),"
-                + " INDEX bs_exclusion_pid (first_pid, second_pid)"
-		        + ");");
-		data.registerMigration(2,  false, "CREATE TABLE IF NOT EXISTS bs_banned_registrars ("
-		        + "rid BIGINT AUTO_INCREMENT PRIMARY KEY,"
-	            + "create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
-                + "registered_as text"
-		        + ");");
 
+	private void initializeTables() {
+		data.registerMigration(0, true, loadMigrationSQL("/sql/migration.0.sql"));
+		data.registerMigration(1, false, "CREATE TABLE IF NOT EXISTS bs_exclusion ("
+				+ "eid BIGINT AUTO_INCREMENT PRIMARY KEY,"
+				+ "create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+				+ "first_pid BIGINT NOT NULL REFERENCES bs_player(pid),"
+				+ "second_pid BIGINT NOT NULL REFERENCES bs_player(pid),"
+				+ " INDEX bs_exclusion_pid (first_pid, second_pid)"
+				+ ");");
+		data.registerMigration(2, false, "CREATE TABLE IF NOT EXISTS bs_banned_registrars ("
+				+ "rid BIGINT AUTO_INCREMENT PRIMARY KEY,"
+				+ "create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+				+ "registered_as text"
+				+ ");");
+
+	}
+
+	//TODO this needs a proper implementation that is SQL aware.
+	private static String[] loadMigrationSQL(String path) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+		try (InputStream in = Objects.requireNonNull(BanStickDatabaseHandler.class.getResourceAsStream(path))) {
+			int read;
+			byte[] buffer = new byte[4096];
+
+			while ((read = in.read(buffer)) != -1) {
+				out.write(buffer, 0, read);
+			}
+
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+
+		try {
+			return new String(out.toByteArray(), "UTF-8").split(";");
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	/**
